@@ -9,14 +9,14 @@ import math
 
 log_format = "%(filename)s::%(funcName)s [%(levelname)s] %(message)s"
 
-vcf_header_lines = '''
+vcf_header_lines = '''\
 ##INFO=<ID=MOSAIC,Number=0,Type=Flag,Description="Variant is mosaic"
 ##INFO=<ID=MOSAICP,Number=1,Type=Integer,Description=\
 "Phred-scaled probability that the variant is mosaic"
 ##INFO=<ID=PHASEDP,Number=1,Type=Integer,Description=\
 "Number of phase-informative barcodes"
 ##INFO=<ID=PHASETP,Number=1,Type=Integer,Description=\
-"Phred-scaled probability that the variant is a true-positive from phasing"
+"Phred-scaled probability that the variant is a true-positive from phasing"\
 '''
 
 

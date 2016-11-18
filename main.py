@@ -146,21 +146,16 @@ def perform_phasing(cur_phase_var, variant_id, variant_barcodes):
             not variant_barcodes[variant_id]["is_mosaic"]):
         return
     logging.info("Phasing the variant at {}:{}".format(phase_chrom, phase_pos))
-    (depth, prob_mosaic, prob_false_positive) = (phasing.phase_mosaic_var(
+    (depth, prob_mosaic, prob_data) = (phasing.phase_mosaic_var(
             variant_id, variant_barcodes))
     additional_tags = []
     logging.debug("depth-{}, prob_mosaic-{}, prob_fp-{}".format(
-            depth, prob_mosaic, prob_false_positive))
-    if prob_mosaic > 0.9:
+            depth, prob_mosaic, prob_data))
+    if prob_data > 0.01 and prob_mosaic > 0.2:
         additional_tags.append("MOSAIC")
     additional_tags.append("PHASEDP={}".format(depth))
-    if depth > 0:
-        if prob_mosaic > 0 and prob_mosaic < 1:
-            additional_tags.append("MOSAICP={}".format(
-                    int(math.log(1 - prob_mosaic, 10) * -10 + 0.4999)))
-        if prob_false_positive > 0:
-            additional_tags.append("PHASETP={}".format(
-                    int(math.log(prob_false_positive, 10) * -10 + 0.4999)))
+    additional_tags.append("PHASETP={}".format(prob_data))
+    additional_tags.append("MOSAICP={}".format(prob_mosaic))
     cur_phase_var[7] = (cur_phase_var[7] + ';' + ';'.join(additional_tags))
     return
 

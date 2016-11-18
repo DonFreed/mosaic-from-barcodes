@@ -5,6 +5,89 @@ import numpy as np
 import scipy.stats
 import sys
 import logging
+import operator as op
+
+
+def n_choose_k(n, k):
+    k = min(k, n - k)
+    if k == 0:
+        return 1
+    numerator = 1
+    for i in range(n, n - k, -1):
+        numerator *= i
+    denominator = 1
+    for i in range(1, k + 1):
+        denominator *= i
+    return numerator // denominator
+
+
+def analyze_mosaic_matrix(phasing_evidence,
+                          sequencing_error_rate=0.02,
+                          mosaic_prior=0.1):
+    '''
+    Calculates the probability of:
+    1) Finding the observed data
+    2) The mosaic variant being on haplotype 1
+    3) The variant being mosaic
+    Using a bayesian framework.
+    '''
+
+    e = sequencing_error_rate
+    d = phasing_evidence
+    p = mosaic_prior
+
+    # Find the probability that the variant is on Haplotype 1 #
+    prob_d_given_h1 = (1 - e) ** d[0, 1] * e ** d[1, 1]
+    prob_d_given_h2 = (1 - e) ** d[1, 1] * e ** d[0, 1]
+    prob_h1 = ((prob_d_given_h1 * 0.5) /
+               (prob_d_given_h1 * 0.5 + prob_d_given_h2 * 0.5))
+    prob_h2 = 1 - prob_h1
+
+    # Find the normalized probability of observing this data #
+    n_alt_reads = d[0, 1] + d[1, 1]
+    n_ml_h1_reads = int((1 - e) * n_alt_reads + 0.499999)
+    n_ml_e_reads = n_alt_reads - n_ml_h1_reads
+    ml_prob_d0 = (1 - e) ** n_ml_h1_reads * e ** n_ml_e_reads
+    ml_prob_d1 = (1 - e) ** n_ml_e_reads * e ** n_ml_h1_reads
+
+    prob_data = ((n_choose_k(n_alt_reads, d[0, 1]) * prob_d_given_h1 +
+                  n_choose_k(n_alt_reads, d[1, 1]) * prob_d_given_h2) /
+                 (n_choose_k(n_alt_reads, n_ml_h1_reads) * ml_prob_d0 +
+                  n_choose_k(n_alt_reads, n_ml_h1_reads) * ml_prob_d1))
+
+    # Estimate the fraction of mosaicism #
+    f_h1 = d[0, 0] / (d[0, 0] + d[0, 1])
+    f_h2 = d[1, 0] / (d[1, 0] + d[1, 1])
+
+    # Find the probability that the variant is mosaic #
+    # Hard cutoffs if very little support for the mosaic variant #
+    if prob_h1 > 0.5 and f_h1 < 2 * e:
+        return (prob_data, prob_h1, 0)
+    elif prob_h1 < 0.5 and f_h2 < 2 * e:
+        return (prob_data, prob_h1, 0)
+    else:
+        prob_d_given_mos_h1 = (
+            (1 - e) ** d[1, 0] * (e + f_h1) ** d[0, 0] *
+            (1 - f_h1) ** d[0, 1])
+        prob_d_given_mos_h2 = (
+            (1 - e) ** d[0, 0] * (e + f_h2) ** d[1, 0] *
+            (1 - f_h2) ** d[1, 1])
+        prob_d_given_nm_h1 = (
+            (1 - e) ** d[1, 0] * (2 * e) ** d[0, 0] * (1 - e) ** d[0, 1])
+        prob_d_given_nm_h2 = (
+            (1 - e) ** d[0, 0] * (2 * e) ** d[1, 0] * (1 - e) ** d[1, 1])
+
+        prob_mos_given_d_h1 = (prob_d_given_mos_h1 * p /
+                               (prob_d_given_mos_h1 * p +
+                                prob_d_given_nm_h1 * (1 - p)))
+        prob_mos_given_d_h2 = (prob_d_given_mos_h2 * p /
+                               (prob_d_given_mos_h2 * p +
+                                prob_d_given_nm_h2 * (1 - p)))
+
+        prob_mosaic = (prob_mos_given_d_h1 * prob_h1 +
+                       prob_mos_given_d_h2 * prob_h2)
+
+        return (prob_data, prob_h1, prob_mosaic)
 
 
 def matrix_to_str(np_matrix, n_rows=np.inf, n_cols=np.inf):
@@ -186,20 +269,7 @@ def determine_mosaicism(haplotypes, skip_barcode_indices,
             str(phasing_evidence)))
 
     depth = sum(sum(phasing_evidence))
-    mosaic_haplotype = 0  # The haplotype with most mosaic variant barcodes
-    if phasing_evidence[1, 1] > phasing_evidence[0, 1]:
-        mosaic_haplotype = 1
-    # Skip sites with no haplotype informaive reads
-    #  or data on the mosaic haplotype
-    prob_mosaic, prob_false_positive = 0, 0
-    if (depth == 0 or (phasing_evidence[1, 1] == 0 and
-                       phasing_evidence[0, 1] == 0)):
-        prob_mosaic, prob_false_positive = 0, 0
-    else:
-        if phasing_evidence[mosaic_haplotype, 1] > 2:
-            if phasing_evidence[mosaic_haplotype, 0] > 2:
-                prob_mosaic = 0.98
-            if phasing_evidence[abs(mosaic_haplotype - 1), 1] > 2:
-                prob_false_positive = 0.98
+    prob_data, prob_h1, prob_mosaic = (
+        analyze_mosaic_matrix(phasing_evidence, sequencing_error_rate))
 
-    return (depth, prob_mosaic, prob_false_positive)
+    return (depth, prob_mosaic, prob_data)

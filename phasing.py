@@ -65,6 +65,8 @@ def analyze_mosaic_matrix(phasing_evidence,
         return (prob_data, prob_h1, 0)
     elif prob_h1 < 0.5 and f_h2 < 2 * e:
         return (prob_data, prob_h1, 0)
+    elif prob_h1 > 0.01 and prob_h1 < 0.99:
+        return (prob_data, prob_h1, 0)
     else:
         prob_d_given_mos_h1 = (
             (1 - e) ** d[1, 0] * (e + f_h1) ** d[0, 0] *
@@ -236,7 +238,7 @@ def get_haplotypes(variant_matrix):
 
 def determine_mosaicism(haplotypes, skip_barcode_indices,
                         barcode_index, variant_id, variant_barcodes,
-                        sequencing_error_rate=0.05):
+                        sequencing_error_rate=0.02):
     '''
     Given the barcodes that the haplotypes are a part of, \
     identify mosaic variants.
